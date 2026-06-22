@@ -1,0 +1,39 @@
+name: Console CensorChecker
+description: Batch tcping probe & Censor checker
+author: Space Time
+branding:
+  icon: eye
+  color: orange
+
+inputs:
+  TARGETS:
+    description: One target per line to check (Required)
+    required: true
+  ORDER:
+    description: "Result sort order (Options: None/Asc/Desc, Default: None)"
+    default: None
+  PORT:
+    description: "Port for unspecified targets (Default: 443)"
+    default: 443
+
+outputs:
+  RESULTS:
+    value: ${{ steps.check-censor.outputs.RESULTS }}
+    description: "JSON result of target avg latency ms (Censored: 2147483647)"
+
+runs:
+  using: composite
+  steps:
+    - name: Check Censor
+      id: check-censor
+      shell: pwsh
+      env:
+        TARGETS: ${{ inputs.TARGETS }}
+        ORDER: ${{ inputs.ORDER }}
+        PORT: ${{ inputs.PORT }}
+      run: |
+        Set-Content -LiteralPath (Join-Path $env:GITHUB_ACTION_PATH 'Target.txt') $env:TARGETS
+
+        . (Join-Path $env:GITHUB_ACTION_PATH 'App.ps1')
+
+        Add-Content -LiteralPath $env:GITHUB_OUTPUT "RESULTS=$(ConvertTo-Json ([App]::new().Main($env:ORDER, $env:PORT)) -Compress)"
