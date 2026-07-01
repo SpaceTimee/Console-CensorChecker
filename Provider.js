@@ -25,27 +25,7 @@ function clickStartButton() {
     document.querySelector(startButtonSelector)?.click();
 }
 
-function getResultCount() {
-    let count = 0;
-
-    for (const row of document.querySelectorAll(resultRowSelector)) {
-        const cells = row.querySelectorAll('td');
-        if (cells.length < 5) continue;
-
-        if (
-            cells[1].querySelector(pendingPingSelector) ||
-            cells[2].querySelector(pendingPingSelector) ||
-            cells[3].querySelector(pendingPingSelector) ||
-            cells[4].querySelector(pendingPingSelector)
-        ) { continue }
-
-        count++;
-    }
-
-    return count;
-}
-
-function getResultData() {
+function getResultData(completedOnly = false) {
     const results = [];
 
     for (const row of document.querySelectorAll(resultRowSelector)) {
@@ -56,11 +36,20 @@ function getResultData() {
         if (!target) continue;
 
         const latencies = [];
+        let hasPendingPing = false;
 
         for (let index = 1; index <= 4; index++) {
+            if (cells[index].querySelector(pendingPingSelector)) {
+                hasPendingPing = true;
+                latencies.push(-1);
+                continue;
+            }
+
             const latency = Number.parseInt(cells[index].querySelector(resultPingSelector)?.textContent);
             latencies.push(Number.isNaN(latency) ? -1 : latency);
         }
+
+        if (completedOnly && hasPendingPing) continue;
 
         results.push({ target, latencies });
     }

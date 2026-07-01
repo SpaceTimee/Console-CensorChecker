@@ -1,11 +1,20 @@
 . (Join-Path $PSScriptRoot "App.ps1")
 
 function Invoke-Check {
-    param ([int] $port = 443)
+    [CmdletBinding()]
+    param ([string[]] $targets, [int] $port = 443)
 
-    function Clear-Host {}
+    [string] $targetPath = Join-Path $PSScriptRoot "Target.txt"
+    [string] $externalTargetPath = Join-Path (Get-Location) "Target.txt"
 
-    [App]::new().Main("None", $port) 6>$null
+    if ($targets.Count -gt 0) {
+        Set-Content -LiteralPath $targetPath $targets
+    }
+    elseif ((Test-Path -LiteralPath $externalTargetPath -PathType Leaf) -and $externalTargetPath -ne $targetPath) {
+        Copy-Item -LiteralPath $externalTargetPath -Destination $targetPath -Force
+    }
+
+    [App]::new().Main($port, { param([PSCustomObject] $result) $PSCmdlet.WriteObject($result) })
 }
 
 Export-ModuleMember Invoke-Check
