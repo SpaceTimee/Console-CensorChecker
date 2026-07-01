@@ -1,5 +1,3 @@
-using namespace System.Collections
-using namespace System.Collections.Specialized
 using namespace System.Diagnostics
 using namespace System.IO
 using namespace System.Net.WebSockets
@@ -10,20 +8,13 @@ Class App {
     hidden [Process] $browserProcess
     hidden [hashtable[]] $cdpSessions = @()
 
-    [OrderedDictionary] Main([string] $order, [int] $port) {
-        $this.Welcome()
+    [void] Main([int] $port, [scriptblock] $resultHandler) {
         $this.StartBrowserProcess()
-
-        [OrderedDictionary] $targetResults = $this.InvokeTargetChecks($port)
-
-        $this.WriteCheckResult($targetResults, $order)
+        $this.InvokeTargetChecks($port, $resultHandler)
         $this.StopBrowserProcess()
-        $this.Closing()
-
-        return $targetResults
     }
 
-    hidden [void] Welcome() {
+    static [void] Welcome() {
         try { Clear-Host -ErrorAction Stop } catch { Write-Verbose $_ }
         Write-Host "Console CensorChecker 启动!" -ForegroundColor Red
     }
@@ -50,54 +41,67 @@ Class App {
         throw "浏览器调试服务启动超时"
     }
 
-    hidden [OrderedDictionary] InvokeTargetChecks([int] $port) {
+    hidden [void] InvokeTargetChecks([int] $port, [scriptblock] $resultHandler) {
         [string] $targetPath = Join-Path $PSScriptRoot "Target.txt"
 
         while (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) { $targetPath = (Read-Host "输入 Target.txt 文件路径").Trim("""") }
 
         [string[]] $targets = foreach ($targetLine in Get-Content -LiteralPath $targetPath -ErrorAction Stop) {
-            [string] $target = $targetLine.Trim()
-            if (-not [string]::IsNullOrEmpty($target)) { $target }
+            if (($target = $targetLine.Trim())) { $target }
         }
 
-        if ($targets.Count -eq 0) { return [ordered]@{} }
+        if ($targets.Count -eq 0) { return }
 
         [string[]] $formattedTargets = foreach ($target in $targets) {
             [string] $normalizedTarget = $target -replace "\s+"
 
             if ($normalizedTarget -like "[[]*") {
-                $normalizedTarget -match "\]:\d+$" ? $normalizedTarget : "$($normalizedTarget):$port"
+                $normalizedTarget -match "\]:\d+$" ? $normalizedTarget : "${normalizedTarget}:$port"
             }
             elseif ($normalizedTarget -match "/" -or $normalizedTarget -match "^\d{1,3}(?:\.\d{1,3}){3}-" -or $normalizedTarget -match ":.*:") {
-                "[$($normalizedTarget)]:$port"
+                "[${normalizedTarget}]:$port"
             }
             else {
-                $normalizedTarget -match ":\d+$" ? $normalizedTarget : "$($normalizedTarget):$port"
+                $normalizedTarget -match ":\d+$" ? $normalizedTarget : "${normalizedTarget}:$port"
             }
         }
 
-        [string[]] $currentTargetBatch = @()
+        [hashtable] $targetLookup = @{}
+        [hashtable] $seenTargets = @{}
+
+        for ([int] $targetIndex = 0; $targetIndex -lt $targets.Count; $targetIndex++) {
+            [string] $targetKey = $targets[$targetIndex]
+            if ($seenTargets.ContainsKey($targetKey)) { continue }
+
+            $seenTargets[$targetKey] = $true
+
+            [string] $formattedTarget = $formattedTargets[$targetIndex]
+            $targetLookup[$formattedTarget] ??= @()
+            $targetLookup[$formattedTarget] += $targetKey
+        }
+
+        [string[]] $currentBatch = @()
         [int] $batchCharCount = 0
 
         [string[][]] $targetBatches = @(
             foreach ($formattedTarget in $formattedTargets) {
-                [int] $addedCharCount = $formattedTarget.Length + ($currentTargetBatch.Count -gt 0 ? 1 : 0)
+                [int] $addedCharCount = $formattedTarget.Length + ($currentBatch.Count -gt 0 ? 1 : 0)
 
-                if ($currentTargetBatch.Count -ge 256 -or $batchCharCount + $addedCharCount -gt 10000) {
-                    if ($currentTargetBatch.Count -gt 0) { , $currentTargetBatch }
-                    $currentTargetBatch = @()
+                if ($currentBatch.Count -ge 256 -or $batchCharCount + $addedCharCount -gt 10000) {
+                    if ($currentBatch.Count -gt 0) { , $currentBatch }
+                    $currentBatch = @()
                     $batchCharCount = 0
                     $addedCharCount = $formattedTarget.Length
                 }
 
-                $currentTargetBatch += $formattedTarget
+                $currentBatch += $formattedTarget
                 $batchCharCount += $addedCharCount
             }
 
-            if ($currentTargetBatch.Count -gt 0) { , $currentTargetBatch }
+            if ($currentBatch.Count -gt 0) { , $currentBatch }
         )
 
-        [string] $jsScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot "Provider.js") -Raw -ErrorAction Stop
+        [string] $providerScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot "Provider.js") -Raw -ErrorAction Stop
 
         $this.cdpSessions = @(
             for ([int] $batchIndex = 0; $batchIndex -lt $targetBatches.Count; $batchIndex++) {
@@ -109,8 +113,8 @@ Class App {
 
                 [hashtable] $cdpSession = @{ WebSocket = $webSocket; CdpId = 0 }
                 $null = $this.SendCdpCommand($cdpSession, "Page.enable", @{})
-                $null = $this.SendCdpCommand($cdpSession, "Page.addScriptToEvaluateOnNewDocument", @{ source = $jsScript })
-                $null = $this.SendCdpCommand($cdpSession, "Page.navigate", @{ url = $this.InvokeJsExpression($cdpSession, "$jsScript; getPageUrl()") })
+                $null = $this.SendCdpCommand($cdpSession, "Page.addScriptToEvaluateOnNewDocument", @{ source = $providerScript })
+                $null = $this.SendCdpCommand($cdpSession, "Page.navigate", @{ url = $this.InvokeJsExpression($cdpSession, "$providerScript; getPageUrl()") })
                 $cdpSession
             }
         )
@@ -126,91 +130,73 @@ Class App {
         }
 
         for ([int] $batchIndex = 0; $batchIndex -lt $targetBatches.Count; $batchIndex++) {
-            $null = $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "fillTargetTextarea($(ConvertTo-Json ($targetBatches[$batchIndex] -join "`n") -Compress))")
-            $null = $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "clickStartButton()")
+            $null = $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "fillTargetTextarea($(ConvertTo-Json ($targetBatches[$batchIndex] -join "`n") -Compress)); clickStartButton()")
         }
-
 
         [bool[]] $completedBatches = [bool[]]::new($targetBatches.Count)
         [int] $completedBatchCount = 0
         [datetime] $checkStartTime = Get-Date
+        [hashtable] $completedTargets = @{}
 
-        [PSCustomObject[]] $allBatchResults = @(
-            while ($completedBatchCount -lt $targetBatches.Count) {
-                Start-Sleep 1
+        while ($completedBatchCount -lt $targetBatches.Count) {
+            Start-Sleep 1
 
-                for ([int] $batchIndex = 0; $batchIndex -lt $targetBatches.Count; $batchIndex++) {
-                    if ($completedBatches[$batchIndex]) { continue }
-                    if ([int]((Get-Date) - $checkStartTime).TotalSeconds -lt ($targetBatches[$batchIndex].Count + 10) -and $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "getResultCount()") -lt $targetBatches[$batchIndex].Count) { continue }
+            for ([int] $batchIndex = 0; $batchIndex -lt $targetBatches.Count; $batchIndex++) {
+                if ($completedBatches[$batchIndex]) { continue }
 
-                    $completedBatches[$batchIndex] = $true
-                    $completedBatchCount++
-                    $this.GetBatchResults($this.cdpSessions[$batchIndex])
+                [bool] $batchTimedOut = [int]((Get-Date) - $checkStartTime).TotalSeconds -ge ($targetBatches[$batchIndex].Count + 10)
+                [string] $batchResultJson = $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "getResultData($(ConvertTo-Json (-not $batchTimedOut) -Compress))")
+
+                foreach ($batchResult in ([string]::IsNullOrWhiteSpace($batchResultJson) ? @() : @(ConvertFrom-Json $batchResultJson -ErrorAction Stop))) {
+                    if ($null -eq $batchResult.target -or -not $targetLookup.ContainsKey($batchResult.target) -or $completedTargets.ContainsKey($batchResult.target)) { continue }
+
+                    $completedTargets[$batchResult.target] = $true
+                    [int[]] $targetLatencies = @($batchResult.latencies)
+                    [int] $targetLatency = [int]::MaxValue
+
+                    if ($targetLatencies.Count -gt 0) {
+                        [int] $timeoutCount = 0
+                        [int] $totalLatency = 0
+
+                        foreach ($latency in $targetLatencies) {
+                            if ($latency -eq -1) { $timeoutCount++ }
+                            $totalLatency += ($latency -eq -1 ? 300 : $latency)
+                        }
+
+                        $targetLatency = $timeoutCount -ge 3 ? [int]::MaxValue : [int]($totalLatency / $targetLatencies.Count)
+                    }
+
+                    foreach ($targetKey in $targetLookup[$batchResult.target]) {
+                        $this.InvokeResultHandler($targetKey, $targetLatency, $resultHandler)
+                    }
                 }
-            }
-        )
 
-        [hashtable] $latencyLookup = @{}
+                [bool] $batchCompleted = $true
 
-        foreach ($batchResult in $allBatchResults) {
-            if ($null -ne $batchResult.target) { $latencyLookup[$batchResult.target] = $batchResult.latencies }
-        }
+                foreach ($formattedTarget in $targetBatches[$batchIndex]) {
+                    if ($completedTargets.ContainsKey($formattedTarget)) { continue }
 
-        [OrderedDictionary] $targetResults = [ordered]@{}
-
-        for ([int] $targetIndex = 0; $targetIndex -lt $targets.Count; $targetIndex++) {
-            [string] $targetKey = $targets[$targetIndex]
-            if ($targetResults.Contains($targetKey)) { continue }
-
-            [string] $formattedTargetKey = $formattedTargets[$targetIndex]
-
-            if (-not $latencyLookup.ContainsKey($formattedTargetKey)) {
-                $targetResults[$targetKey] = [int]::MaxValue
-                continue
-            }
-
-            [int[]] $targetLatencies = @($latencyLookup[$formattedTargetKey])
-
-            if ($targetLatencies.Count -eq 0) {
-                $targetResults[$targetKey] = [int]::MaxValue
-                continue
-            }
-
-            [int] $timeoutCount = 0
-            [int] $latencyTotal = 0
-
-            foreach ($targetLatency in $targetLatencies) {
-                if ($targetLatency -eq -1) {
-                    $timeoutCount++
-                    $latencyTotal += 300
+                    $batchCompleted = $false
+                    break
                 }
-                else {
-                    $latencyTotal += $targetLatency
+
+                if (-not $batchTimedOut -and -not $batchCompleted) { continue }
+
+                if ($batchTimedOut) {
+                    foreach ($formattedTarget in $targetBatches[$batchIndex]) {
+                        if ($completedTargets.ContainsKey($formattedTarget)) { continue }
+
+                        $completedTargets[$formattedTarget] = $true
+
+                        foreach ($targetKey in $targetLookup[$formattedTarget]) {
+                            $this.InvokeResultHandler($targetKey, [int]::MaxValue, $resultHandler)
+                        }
+                    }
                 }
+
+                $completedBatches[$batchIndex] = $true
+                $completedBatchCount++
             }
-
-            $targetResults[$targetKey] = $timeoutCount -ge 3 ? [int]::MaxValue : [int]($latencyTotal / $targetLatencies.Count)
-        }
-
-        return $targetResults
-    }
-
-    hidden [PSCustomObject[]] GetBatchResults([hashtable] $cdpSession) {
-        [string] $batchResultJson = $this.InvokeJsExpression($cdpSession, "getResultData()")
-
-        return ([string]::IsNullOrWhiteSpace($batchResultJson) ? @() : @(ConvertFrom-Json $batchResultJson -ErrorAction Stop))
-    }
-
-    hidden [void] WriteCheckResult([OrderedDictionary] $targetResults, [string] $order) {
-        [DictionaryEntry[]] $resultEntries = @($targetResults.GetEnumerator())
-
-        switch ($order) {
-            "Asc" { $resultEntries = @($resultEntries | Sort-Object Value -Stable) }
-            "Desc" { $resultEntries = @($resultEntries | Sort-Object Value -Descending -Stable) }
-        }
-
-        foreach ($resultEntry in $resultEntries) {
-            Write-Host "$($resultEntry.Key): $($resultEntry.Value -eq [int]::MaxValue ? "超时" : "$($resultEntry.Value) ms")"
         }
     }
 
@@ -236,7 +222,11 @@ Class App {
         $this.browserProcess = $null
     }
 
-    hidden [void] Closing() {
+    static [void] WriteCheckResult([PSCustomObject] $result) {
+        Write-Host "$($result.Target): $($result.Latency -eq [int]::MaxValue ? "超时" : "$($result.Latency) ms")"
+    }
+
+    static [void] Closing() {
         Write-Host "检测结果仅供参考" -ForegroundColor Red
     }
 
@@ -249,7 +239,7 @@ Class App {
         [byte[]] $receiveBuffer = [byte[]]::new(32KB)
         [CancellationTokenSource] $cancellationTokenSource = [CancellationTokenSource]::new(10000)
 
-        for ([int] $readAttempt = 0; $readAttempt -lt 30; $readAttempt++) {
+        for ([int] $tryCount = 0; $tryCount -lt 30; $tryCount++) {
             if ($cdpSession.WebSocket.State -ne [WebSocketState]::Open) { return $null }
 
             [PSCustomObject] $cdpResponse = $null
@@ -285,8 +275,12 @@ Class App {
     }
 
     hidden [object] InvokeJsExpression([hashtable] $cdpSession, [string] $jsExpression) {
-        [PSCustomObject] $cdpResponse = $this.SendCdpCommand($cdpSession, "Runtime.evaluate", @{ expression = $jsExpression; returnByValue = $true })
+        return $this.SendCdpCommand($cdpSession, "Runtime.evaluate", @{ expression = $jsExpression; returnByValue = $true })?.result.result.value
+    }
 
-        return $null -eq $cdpResponse ? $null : $cdpResponse.result.result.value
+    hidden [void] InvokeResultHandler([string] $target, [int] $latency, [scriptblock] $resultHandler) {
+        if ($null -eq $resultHandler) { return }
+
+        & $resultHandler ([PSCustomObject] [ordered] @{ Target = $target; Latency = $latency })
     }
 }

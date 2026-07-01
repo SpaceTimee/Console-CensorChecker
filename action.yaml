@@ -7,11 +7,7 @@ branding:
 
 inputs:
   TARGETS:
-    description: One target per line to check (Required)
-    required: true
-  ORDER:
-    description: "Result sort order (Options: None/Asc/Desc, Default: None)"
-    default: None
+    description: One target per line to check
   PORT:
     description: "Port for unspecified targets (Default: 443)"
     default: 443
@@ -29,11 +25,32 @@ runs:
       shell: pwsh
       env:
         TARGETS: ${{ inputs.TARGETS }}
-        ORDER: ${{ inputs.ORDER }}
         PORT: ${{ inputs.PORT }}
       run: |
-        Set-Content -LiteralPath (Join-Path $env:GITHUB_ACTION_PATH 'Target.txt') $env:TARGETS
+        using namespace System.Collections.Specialized
+
+        [string] $targetPath = Join-Path $env:GITHUB_ACTION_PATH 'Target.txt'
+        [string] $externalTargetPath = Join-Path $env:GITHUB_WORKSPACE 'Target.txt'
+
+        if (-not [string]::IsNullOrWhiteSpace($env:TARGETS)) {
+            Set-Content -LiteralPath $targetPath $env:TARGETS
+        }
+        elseif ((Test-Path -LiteralPath $externalTargetPath -PathType Leaf) -and $externalTargetPath -ne $targetPath) {
+            Copy-Item -LiteralPath $externalTargetPath -Destination $targetPath -Force
+        }
+        elseif (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) {
+            throw '提供 TARGETS 参数或 Target.txt 文件'
+        }
 
         . (Join-Path $env:GITHUB_ACTION_PATH 'App.ps1')
 
-        Add-Content -LiteralPath $env:GITHUB_OUTPUT "RESULTS=$(ConvertTo-Json ([App]::new().Main($env:ORDER, $env:PORT)) -Compress)"
+        [OrderedDictionary] $results = [ordered]@{}
+
+        [App]::new().Main($env:PORT, {
+            param([PSCustomObject] $result)
+
+            [App]::WriteCheckResult($result)
+            $results[$result.Target] = $result.Latency
+        })
+
+        Add-Content -LiteralPath $env:GITHUB_OUTPUT "RESULTS=$(ConvertTo-Json $results -Compress)"

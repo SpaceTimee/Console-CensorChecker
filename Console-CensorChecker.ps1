@@ -1,4 +1,4 @@
-param ([string] $trans, [switch] $loop, [string] [ValidateSet("None", "Asc", "Desc")] $order = "None", [int] $port = 443)
+param ([string] $trans, [switch] $loop, [int] $port = 443)
 
 do {
     if (Test-Path -LiteralPath $trans -PathType Container) {
@@ -13,7 +13,15 @@ do {
             if ($ps1File.FullName -ne $PSCommandPath) { . $ps1File.FullName }
         }
 
-        $null = [App]::new().Main($order, $port)
+        [App]::Welcome()
+
+        [App]::new().Main($port, {
+                param([PSCustomObject] $result)
+
+                [App]::WriteCheckResult($result)
+            })
+
+        [App]::Closing()
     }
 
     if (Test-Path -LiteralPath $trans -PathType Container) { Stop-Transcript }
