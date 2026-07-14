@@ -26,7 +26,11 @@ Class App {
             while (-not (Test-Path -LiteralPath $browserPath -PathType Leaf)) { $browserPath = (Read-Host "输入 Chromium 内核浏览器路径").Trim("""") }
         }
 
-        $this.browserProcess = Start-Process $browserPath "--headless --remote-debugging-port=9222 --user-data-dir=""$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")""" -PassThru -RedirectStandardError ($global:IsWindows ? "NUL" : "/dev/null") -ErrorAction Stop
+        $this.browserProcess = Start-Process $browserPath @(
+            "--headless"
+            "--remote-debugging-port=9222"
+            "--user-data-dir=$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")"
+        ) -PassThru -RedirectStandardError ($global:IsWindows ? "NUL" : "/dev/null") -ErrorAction Stop
 
         for ([int] $tryCount = 0; $tryCount -lt 10; $tryCount++) {
             Start-Sleep 1
@@ -147,7 +151,7 @@ Class App {
                 [bool] $batchTimedOut = [int]((Get-Date) - $checkStartTime).TotalSeconds -ge ($targetBatches[$batchIndex].Count + 10)
                 [string] $batchResultJson = $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "getResultData($(ConvertTo-Json (-not $batchTimedOut) -Compress))")
 
-                foreach ($batchResult in ([string]::IsNullOrWhiteSpace($batchResultJson) ? @() : @(ConvertFrom-Json $batchResultJson -ErrorAction Stop))) {
+                foreach ($batchResult in ([string]::IsNullOrWhiteSpace($batchResultJson) ? @() : @(ConvertFrom-Json $batchResultJson))) {
                     if ($null -eq $batchResult.target -or -not $targetLookup.ContainsKey($batchResult.target) -or $completedTargets.ContainsKey($batchResult.target)) { continue }
 
                     $completedTargets[$batchResult.target] = $true
@@ -215,7 +219,7 @@ Class App {
 
         if (-not $this.browserProcess.HasExited) {
             Stop-Process $this.browserProcess -ErrorAction Stop
-            $this.browserProcess.WaitForExit()
+            Wait-Process -InputObject $this.browserProcess
         }
 
         $this.browserProcess.Dispose()

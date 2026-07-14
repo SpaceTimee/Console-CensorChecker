@@ -1,15 +1,15 @@
-param ([string] $trans, [switch] $loop, [int] $port = 443)
+﻿param ([string] $trans, [switch] $loop, [int] $port = 443)
 
 do {
     if (Test-Path -LiteralPath $trans -PathType Container) {
-        Start-Transcript -LiteralPath (Join-Path $trans "Trans.log") -UseMinimalHeader | Out-Null
+        $null = Start-Transcript -LiteralPath (Join-Path $trans "Trans.log") -UseMinimalHeader
     }
 
-    if ($PSEdition -ne "Core") {
+    if (-not $IsCoreCLR) {
         Write-Host "该脚本需要在 PowerShell 7.x 环境运行"
     }
     else {
-        foreach ($ps1File in Get-ChildItem $PSScriptRoot "*.ps1") {
+        foreach ($ps1File in Get-ChildItem -LiteralPath $PSScriptRoot "*.ps1") {
             if ($ps1File.FullName -ne $PSCommandPath) { . $ps1File.FullName }
         }
 
