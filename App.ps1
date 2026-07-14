@@ -5,6 +5,8 @@ using namespace System.Text
 using namespace System.Threading
 
 Class App {
+    static hidden [string] $root
+
     hidden [Process] $browserProcess
     hidden [hashtable[]] $cdpSessions = @()
 
@@ -26,7 +28,11 @@ Class App {
             while (-not (Test-Path -LiteralPath $browserPath -PathType Leaf)) { $browserPath = (Read-Host "输入 Chromium 内核浏览器路径").Trim("""") }
         }
 
-        $this.browserProcess = Start-Process $browserPath "--headless --remote-debugging-port=9222 --user-data-dir=""$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")""" -PassThru -RedirectStandardError ($global:IsWindows ? "NUL" : "/dev/null") -ErrorAction Stop
+        $this.browserProcess = Start-Process $browserPath @(
+            "--headless"
+            "--remote-debugging-port=9222"
+            "--user-data-dir=$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")"
+        ) -PassThru -RedirectStandardError ($global:IsWindows ? "NUL" : "/dev/null") -ErrorAction Stop
 
         for ([int] $tryCount = 0; $tryCount -lt 10; $tryCount++) {
             Start-Sleep 1
@@ -42,7 +48,7 @@ Class App {
     }
 
     hidden [void] InvokeTargetChecks([int] $port, [scriptblock] $resultHandler) {
-        [string] $targetPath = Join-Path $PSScriptRoot "Target.txt"
+        [string] $targetPath = Join-Path ([App]::root) "Target.txt"
 
         while (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) { $targetPath = (Read-Host "输入 Target.txt 文件路径").Trim("""") }
 
@@ -101,7 +107,7 @@ Class App {
             if ($currentBatch.Count -gt 0) { , $currentBatch }
         )
 
-        [string] $providerScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot "Provider.js") -Raw -ErrorAction Stop
+        [string] $providerScript = Get-Content -LiteralPath (Join-Path ([App]::root) "Provider.js") -Raw -ErrorAction Stop
 
         $this.cdpSessions = @(
             for ([int] $batchIndex = 0; $batchIndex -lt $targetBatches.Count; $batchIndex++) {
@@ -147,7 +153,7 @@ Class App {
                 [bool] $batchTimedOut = [int]((Get-Date) - $checkStartTime).TotalSeconds -ge ($targetBatches[$batchIndex].Count + 10)
                 [string] $batchResultJson = $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "getResultData($(ConvertTo-Json (-not $batchTimedOut) -Compress))")
 
-                foreach ($batchResult in ([string]::IsNullOrWhiteSpace($batchResultJson) ? @() : @(ConvertFrom-Json $batchResultJson -ErrorAction Stop))) {
+                foreach ($batchResult in ([string]::IsNullOrWhiteSpace($batchResultJson) ? @() : @(ConvertFrom-Json $batchResultJson))) {
                     if ($null -eq $batchResult.target -or -not $targetLookup.ContainsKey($batchResult.target) -or $completedTargets.ContainsKey($batchResult.target)) { continue }
 
                     $completedTargets[$batchResult.target] = $true
@@ -215,7 +221,7 @@ Class App {
 
         if (-not $this.browserProcess.HasExited) {
             Stop-Process $this.browserProcess -ErrorAction Stop
-            $this.browserProcess.WaitForExit()
+            Wait-Process -InputObject $this.browserProcess
         }
 
         $this.browserProcess.Dispose()
@@ -284,3 +290,5 @@ Class App {
         & $resultHandler ([PSCustomObject] [ordered] @{ Target = $target; Latency = $latency })
     }
 }
+
+[App]::root = $PSScriptRoot

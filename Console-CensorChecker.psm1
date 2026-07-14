@@ -11,7 +11,7 @@ function Invoke-Check {
         Set-Content -LiteralPath $targetPath $targets
     }
     elseif ((Test-Path -LiteralPath $externalTargetPath -PathType Leaf) -and $externalTargetPath -ne $targetPath) {
-        Copy-Item -LiteralPath $externalTargetPath -Destination $targetPath -Force
+        Copy-Item -LiteralPath $externalTargetPath $targetPath -Force
     }
 
     [App]::new().Main($port, { param([PSCustomObject] $result) $PSCmdlet.WriteObject($result) })
