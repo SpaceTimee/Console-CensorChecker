@@ -37,7 +37,7 @@ Invoke-Check -targets example.com
 3. Github Actions: 在工作流中调用 SpaceTimee/Console-CensorChecker 即可
 
 ```yaml
-- uses: SpaceTimee/Console-CensorChecker@v1.1.4.50
+- uses: SpaceTimee/Console-CensorChecker@v1.1.4.51
   with:
       TARGETS: example.com
 ```
