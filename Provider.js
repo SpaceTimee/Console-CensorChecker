@@ -13,12 +13,8 @@ function isPageReady() {
     return document.querySelector(targetTextareaSelector) !== null && document.querySelector(startButtonSelector) !== null;
 }
 
-function fillTargetTextarea(input) {
-    const textarea = document.querySelector(targetTextareaSelector);
-    if (!textarea) return;
-
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(textarea, input);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+function focusTargetTextarea() {
+    document.querySelector(targetTextareaSelector)?.focus();
 }
 
 function clickStartButton() {
