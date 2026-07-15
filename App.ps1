@@ -29,10 +29,10 @@ Class App {
         $this.browserProcess = Start-Process $browserPath @(
             "--headless"
             "--remote-debugging-port=9222"
-            "--user-data-dir=$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")"
+            "--user-data-dir=`"$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")`""
         ) -PassThru -RedirectStandardError ($global:IsWindows ? "NUL" : "/dev/null") -ErrorAction Stop
 
-        for ([int] $tryCount = 0; $tryCount -lt 10; $tryCount++) {
+        for ([int] $tryCount = 0; $tryCount -lt 30; $tryCount++) {
             Start-Sleep 1
 
             try {
@@ -124,17 +124,20 @@ Class App {
         )
 
         foreach ($cdpSession in $this.cdpSessions) {
-            for ([int] $tryCount = 0; $tryCount -lt 10; $tryCount++) {
+            for ([int] $tryCount = 0; $tryCount -lt 30; $tryCount++) {
                 if ($this.InvokeJsExpression($cdpSession, "isPageReady()")) { break }
 
                 Start-Sleep 1
             }
 
-            if ($tryCount -eq 10) { throw "检测页面加载超时" }
+            if ($tryCount -eq 30) { throw "检测页面加载超时" }
         }
 
         for ([int] $batchIndex = 0; $batchIndex -lt $targetBatches.Count; $batchIndex++) {
-            $null = $this.InvokeJsExpression($this.cdpSessions[$batchIndex], "fillTargetTextarea($(ConvertTo-Json ($targetBatches[$batchIndex] -join "`n") -Compress)); clickStartButton()")
+            [hashtable] $cdpSession = $this.cdpSessions[$batchIndex]
+            $null = $this.InvokeJsExpression($cdpSession, "focusTargetTextarea()")
+            $null = $this.SendCdpCommand($cdpSession, "Input.insertText", @{ text = ($targetBatches[$batchIndex] -join "`n") })
+            $null = $this.InvokeJsExpression($cdpSession, "clickStartButton()")
         }
 
         [bool[]] $completedBatches = [bool[]]::new($targetBatches.Count)
@@ -279,7 +282,10 @@ Class App {
     }
 
     hidden [object] InvokeJsExpression([hashtable] $cdpSession, [string] $jsExpression) {
-        return $this.SendCdpCommand($cdpSession, "Runtime.evaluate", @{ expression = $jsExpression; returnByValue = $true })?.result.result.value
+        [PSCustomObject] $cdpResponse = $this.SendCdpCommand($cdpSession, "Runtime.evaluate", @{ expression = $jsExpression; returnByValue = $true })
+        if ($null -eq $cdpResponse -or $null -ne $cdpResponse.result.exceptionDetails) { return $null }
+
+        return $cdpResponse.result.result.value
     }
 
     hidden [void] InvokeResultHandler([string] $target, [int] $latency, [scriptblock] $resultHandler) {

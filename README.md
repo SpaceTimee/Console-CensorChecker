@@ -18,6 +18,8 @@
 
 2. PowerShell Gallery: [https://www.powershellgallery.com/packages/Console-CensorChecker](https://www.powershellgallery.com/packages/Console-CensorChecker)
 
+3. Github Marketplace: [https://github.com/marketplace/actions/console-censorchecker](https://github.com/marketplace/actions/console-censorchecker)
+
 ## 安装方式
 
 PowerShell Module: `Install-Module Console-CensorChecker`
@@ -35,7 +37,7 @@ Invoke-Check -targets example.com
 3. Github Actions: 在工作流中调用 SpaceTimee/Console-CensorChecker 即可
 
 ```yaml
-- uses: SpaceTimee/Console-CensorChecker@v1.1.4.1
+- uses: SpaceTimee/Console-CensorChecker@v1.1.4.50
   with:
       TARGETS: example.com
 ```
