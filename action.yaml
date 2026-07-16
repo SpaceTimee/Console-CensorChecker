@@ -7,7 +7,10 @@ branding:
 
 inputs:
   TARGETS:
-    description: One target per line to check
+    description: One target per line to check or a single file path containing targets
+  BROWSER:
+    description: "Chromium browser path (Default: google-chrome)"
+    default: google-chrome
   PORT:
     description: "Port for unspecified targets (Default: 443)"
     default: 443
@@ -25,28 +28,36 @@ runs:
       shell: pwsh
       env:
         TARGETS: ${{ inputs.TARGETS }}
+        BROWSER: ${{ inputs.BROWSER }}
         PORT: ${{ inputs.PORT }}
       run: |
         using namespace System.Collections.Specialized
 
-        [string] $targetPath = Join-Path $env:GITHUB_ACTION_PATH 'Target.txt'
-        [string] $externalTargetPath = Join-Path $env:GITHUB_WORKSPACE 'Target.txt'
+        [string] $targetPath = Join-Path $env:GITHUB_ACTION_PATH "Target.txt"
+        [string] $externalTargetPath = Join-Path $env:GITHUB_WORKSPACE "Target.txt"
 
         if (-not [string]::IsNullOrWhiteSpace($env:TARGETS)) {
-            Set-Content -LiteralPath $targetPath $env:TARGETS
+            [string[]] $targets = @(($env:TARGETS -split "\r?\n").Trim() -ne "")
+
+            if ($targets.Count -eq 1 -and (Test-Path -LiteralPath $targets[0] -PathType Leaf)) {
+                Copy-Item -LiteralPath $targets[0] $targetPath -Force
+            }
+            else {
+                Set-Content -LiteralPath $targetPath $targets
+            }
         }
         elseif ((Test-Path -LiteralPath $externalTargetPath -PathType Leaf) -and $externalTargetPath -ne $targetPath) {
-            Copy-Item -LiteralPath $externalTargetPath -Destination $targetPath -Force
+            Copy-Item -LiteralPath $externalTargetPath $targetPath -Force
         }
         elseif (-not (Test-Path -LiteralPath $targetPath -PathType Leaf)) {
-            throw '提供 TARGETS 参数或 Target.txt 文件'
+            throw "提供 TARGETS 参数或 Target.txt 文件"
         }
 
-        . (Join-Path $env:GITHUB_ACTION_PATH 'App.ps1')
+        . (Join-Path $env:GITHUB_ACTION_PATH "App.ps1")
 
         [OrderedDictionary] $results = [ordered]@{}
 
-        [App]::new().Main($env:PORT, {
+        [App]::new().Main($env:BROWSER, $env:PORT, {
             param([PSCustomObject] $result)
 
             [App]::WriteCheckResult($result)

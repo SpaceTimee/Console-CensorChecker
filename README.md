@@ -15,9 +15,7 @@
 ## 下载地址
 
 1. Github Release: [https://github.com/SpaceTimee/Console-CensorChecker/releases](https://github.com/SpaceTimee/Console-CensorChecker/releases)
-
 2. PowerShell Gallery: [https://www.powershellgallery.com/packages/Console-CensorChecker](https://www.powershellgallery.com/packages/Console-CensorChecker)
-
 3. Github Marketplace: [https://github.com/marketplace/actions/console-censorchecker](https://github.com/marketplace/actions/console-censorchecker)
 
 ## 安装方式
@@ -27,20 +25,46 @@ PowerShell Module: `Install-Module Console-CensorChecker`
 ## 食用方式
 
 1. PowerShell Script: 在 pwsh 7.x 环境中运行 Console-CensorChecker.ps1 脚本 → 按照提示操作即可
-
 2. PowerShell Module: 在 pwsh 7.x 环境中执行 Invoke-Check 命令即可
 
 ```powershell
 Invoke-Check -targets example.com
 ```
 
-3. Github Actions: 在工作流中调用 SpaceTimee/Console-CensorChecker 即可
+3. MCP Server: 在 pwsh 7.x 环境中执行 Invoke-Check -mcp 即可
+
+```powershell
+Invoke-Check -mcp
+```
+
+4. MCP Client: 在 Agent 客户端中添加 MCP 配置即可
+
+```json
+{
+  "mcpServers": {
+    "console-censorchecker": {
+      "command": "pwsh",
+      "args": [
+        "-Command",
+        "Invoke-Check -mcp"
+      ]
+    }
+  }
+}
+```
+
+5. Github Actions: 在工作流中调用 SpaceTimee/Console-CensorChecker 即可
 
 ```yaml
-- uses: SpaceTimee/Console-CensorChecker@v1.1.4.51
+- uses: SpaceTimee/Console-CensorChecker@v1.1.4.52
   with:
       TARGETS: example.com
 ```
+
+## MCP 托管
+
+1. Smithery (首选): [https://smithery.ai/servers/spacetime/console-censorchecker](https://smithery.ai/servers/spacetime/console-censorchecker)
+2. Glama: [https://glama.ai/mcp/servers/SpaceTimee/Console-CensorChecker](https://glama.ai/mcp/servers/SpaceTimee/Console-CensorChecker)
 
 ## 开发者
 

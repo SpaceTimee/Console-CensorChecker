@@ -8,8 +8,8 @@ Class App {
     hidden [Process] $browserProcess
     hidden [hashtable[]] $cdpSessions = @()
 
-    [void] Main([int] $port, [scriptblock] $resultHandler) {
-        $this.StartBrowserProcess()
+    [void] Main([string] $browser, [int] $port, [scriptblock] $resultHandler) {
+        $this.StartBrowserProcess($browser)
         $this.InvokeTargetChecks($port, $resultHandler)
         $this.StopBrowserProcess()
     }
@@ -19,14 +19,12 @@ Class App {
         Write-Host "Console CensorChecker 启动!" -ForegroundColor Red
     }
 
-    hidden [void] StartBrowserProcess() {
-        [string] $browserPath = "google-chrome"
-
-        if (-not (Get-Command $browserPath -CommandType Application -ErrorAction Ignore)) {
-            while (-not (Test-Path -LiteralPath $browserPath -PathType Leaf)) { $browserPath = (Read-Host "输入 Chromium 内核浏览器路径").Trim("""") }
+    hidden [void] StartBrowserProcess([string] $browser) {
+        if (-not (Get-Command $browser -CommandType Application -ErrorAction Ignore)) {
+            while (-not (Test-Path -LiteralPath $browser -PathType Leaf)) { $browser = (Read-Host "输入 Chromium 内核浏览器路径").Trim("""") }
         }
 
-        $this.browserProcess = Start-Process $browserPath @(
+        $this.browserProcess = Start-Process $browser @(
             "--headless"
             "--remote-debugging-port=9222"
             "--user-data-dir=`"$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")`""
@@ -222,7 +220,7 @@ Class App {
 
         if (-not $this.browserProcess.HasExited) {
             Stop-Process $this.browserProcess -ErrorAction Stop
-            Wait-Process -InputObject $this.browserProcess
+            Wait-Process $this.browserProcess.Id
         }
 
         $this.browserProcess.Dispose()
