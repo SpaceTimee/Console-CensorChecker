@@ -28,6 +28,7 @@ Class App {
             "--headless"
             "--remote-debugging-port=9222"
             "--user-data-dir=`"$(Join-Path ([Path]::GetTempPath()) "Console-CensorChecker")`""
+            "--no-sandbox"
         ) -PassThru -RedirectStandardError ($global:IsWindows ? "NUL" : "/dev/null") -ErrorAction Stop
 
         for ([int] $tryCount = 0; $tryCount -lt 30; $tryCount++) {
@@ -135,6 +136,7 @@ Class App {
             [hashtable] $cdpSession = $this.cdpSessions[$batchIndex]
             $null = $this.InvokeJsExpression($cdpSession, "focusTargetTextarea()")
             $null = $this.SendCdpCommand($cdpSession, "Input.insertText", @{ text = ($targetBatches[$batchIndex] -join "`n") })
+            Start-Sleep 1
             $null = $this.InvokeJsExpression($cdpSession, "clickStartButton()")
         }
 
@@ -219,8 +221,8 @@ Class App {
         if ($null -eq $this.browserProcess) { return }
 
         if (-not $this.browserProcess.HasExited) {
-            Stop-Process $this.browserProcess -ErrorAction Stop
-            Wait-Process $this.browserProcess.Id
+            Stop-Process $this.browserProcess -ErrorAction Ignore
+            Wait-Process $this.browserProcess -ErrorAction Ignore
         }
 
         $this.browserProcess.Dispose()
