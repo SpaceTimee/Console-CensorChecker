@@ -72,12 +72,6 @@ jobs:
                 )
               }
             }
-            "tools" = @(
-              @{
-                "name" = "$moduleCommand"
-                "description" = (Get-Help "$moduleCommand").Synopsis
-              }
-            )
             "keywords" = @($moduleData.PrivateData.PSData.Tags)
             "license" = "MIT"
             "user_config" = @{
@@ -104,8 +98,7 @@ jobs:
           npx --yes "@anthropic-ai/mcpb" pack "$packagePath" "$moduleName.mcpb"
           npx --yes "@anthropic-ai/mcpb" clean "$moduleName.mcpb"
           npx --yes "@anthropic-ai/mcpb" sign "$moduleName.mcpb" --self-signed
-          npx --yes "@anthropic-ai/mcpb" verify "$moduleName.mcpb"
-          npx --yes "@smithery/cli" mcp publish "$moduleName.mcpb" --name "spacetime/$moduleName".ToLowerInvariant()
+          npx --yes "@smithery/cli" mcp publish "$moduleName.mcpb" --name ("spacetime/$moduleName".ToLowerInvariant())
 
           Add-Content -LiteralPath "$env:GITHUB_ENV" "MODULE_VERSION=$moduleVersion"
           Write-Host "Version: $moduleVersion"
