@@ -41,21 +41,21 @@ Invoke-Check -mcp
 
 ```json
 {
-  "mcpServers": {
-    "console-censorchecker": {
-      "command": "pwsh",
-      "args": ["-Command", "Invoke-Check -mcp"]
+    "mcpServers": {
+        "console-censorchecker": {
+            "command": "pwsh",
+            "args": ["-Command", "Invoke-Check -mcp"]
+        }
     }
-  }
 }
 ```
 
 5. Github Actions: 在工作流中调用 SpaceTimee/Console-CensorChecker 即可
 
 ```yaml
-- uses: SpaceTimee/Console-CensorChecker@v1.1.4.54
+- uses: SpaceTimee/Console-CensorChecker@v1.1.4.55
   with:
-    TARGETS: example.com
+      TARGETS: example.com
 ```
 
 ## MCP 托管
