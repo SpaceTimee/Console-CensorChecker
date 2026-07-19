@@ -1,0 +1,72 @@
+name: Check Censor
+
+on:
+  workflow_dispatch:
+    inputs:
+      ID:
+        description: Durable Object ID
+        type: string
+        required: true
+      TARGETS:
+        description: Comma-separated host targets
+        type: string
+        required: true
+      PORT:
+        description: Default port for targets
+        type: number
+        default: 443
+
+env:
+  ID: ${{ inputs.ID }}
+  TARGETS: ${{ inputs.TARGETS }}
+  PORT: ${{ inputs.PORT }}
+
+jobs:
+  check-censor:
+    name: Check Censor
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch Module
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            Console-CensorChecker.psm1
+            Console-CensorChecker.psd1
+            App.ps1
+            Provider.js
+
+      - name: Run Check
+        shell: pwsh
+        env:
+          CALLBACK_URL: ${{ secrets.CALLBACK_URL }}
+          CALLBACK_TOKEN: ${{ secrets.CALLBACK_TOKEN }}
+        run: |
+          try {
+            [string[]] $targets = @([string[]]("$env:TARGETS" -split ",").Trim() -ne "")
+
+            if ($targets.Count -eq 0) { throw "No valid targets" }
+
+            Import-Module "./Console-CensorChecker.psd1"
+
+            [hashtable] $results = @{}
+
+            foreach ($result in @(Invoke-Check -targets $targets -port "$env:PORT")) { $results += $result }
+
+            [hashtable] $callbackBody = @{
+              "id" = "$env:ID"
+              "results" = $results
+            }
+          }
+          catch {
+            [hashtable] $callbackBody = @{
+              "id" = "$env:ID"
+              "error" = $_.Exception.Message
+            }
+          }
+
+          Invoke-RestMethod "$env:CALLBACK_URL" -Method "POST" -ContentType "application/json" -Authentication "Bearer" -Token (
+            ConvertTo-SecureString "$env:CALLBACK_TOKEN" -AsPlainText
+          ) -Body (ConvertTo-Json $callbackBody -Compress)
+
+          if ($callbackBody.ContainsKey("error")) { throw $callbackBody.error }

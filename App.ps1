@@ -291,6 +291,6 @@ Class App {
     hidden [void] InvokeResultHandler([string] $target, [int] $latency, [scriptblock] $resultHandler) {
         if ($null -eq $resultHandler) { return }
 
-        & $resultHandler ([PSCustomObject] [ordered] @{ Target = $target; Latency = $latency })
+        & $resultHandler ([PSCustomObject] @{ Target = $target; Latency = $latency })
     }
 }

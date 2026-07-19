@@ -29,10 +29,10 @@ do {
         [App]::Welcome()
 
         [App]::new().Main($browser, $port, {
-                param([PSCustomObject] $result)
+            param([PSCustomObject] $result)
 
-                [App]::WriteCheckResult($result)
-            })
+            [App]::WriteCheckResult($result)
+        })
 
         [App]::Closing()
     }
@@ -43,3 +43,5 @@ do {
 while ($loop)
 
 Read-Host "按回车键结束"
+
+Remove-Variable LASTEXITCODE -Scope Global -ErrorAction Ignore

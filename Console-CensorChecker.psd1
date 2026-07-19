@@ -12,7 +12,7 @@
 RootModule = 'Console-CensorChecker.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.1.4.53'
+ModuleVersion = '1.1.4.54'
 
 # Supported PSEditions
 CompatiblePSEditions = 'Core'
@@ -107,7 +107,7 @@ PrivateData = @{
         # IconUri = ''
 
         # ReleaseNotes of this module
-        ReleaseNotes = '1.1.4.53 Update'
+        ReleaseNotes = '1.1.4.54 Update'
 
         # Prerelease string of this module
         # Prerelease = ''

@@ -3,7 +3,7 @@
 function Invoke-Check {
     <#
     .Synopsis
-        Check host targets for tcping latency and censorship. Returns a JSON result with Target and Latency (timeout: 2147483647)
+        Check host targets for tcping latency and censorship. Returns target-latency key-value pairs (timeout: 2147483647)
     .Component
         Network
     .Role
@@ -51,7 +51,11 @@ function Invoke-Check {
         Copy-Item -LiteralPath $externalTargetPath $targetPath -Force
     }
 
-    [App]::new().Main($browser, $port, { param([PSCustomObject] $result) $PSCmdlet.WriteObject($result) })
+    [App]::new().Main($browser, $port, {
+        param([PSCustomObject] $result)
+
+        $PSCmdlet.WriteObject(@{ $result.Target = $result.Latency })
+    })
 }
 
 Export-ModuleMember "Invoke-Check"

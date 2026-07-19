@@ -31,7 +31,7 @@ PowerShell Module: `Install-Module Console-CensorChecker`
 Invoke-Check -targets example.com
 ```
 
-3. MCP Server: 在 pwsh 7.x 环境中执行 Invoke-Check -mcp 即可
+3. MCP Server: 在 pwsh 7.x 环境中执行 Invoke-Check -mcp 命令即可
 
 ```powershell
 Invoke-Check -mcp
@@ -41,21 +41,21 @@ Invoke-Check -mcp
 
 ```json
 {
-    "mcpServers": {
-        "console-censorchecker": {
-            "command": "pwsh",
-            "args": ["-Command", "Invoke-Check -mcp"]
-        }
+  "mcpServers": {
+    "console-censorchecker": {
+      "command": "pwsh",
+      "args": ["-Command", "Invoke-Check -mcp"]
     }
+  }
 }
 ```
 
 5. Github Actions: 在工作流中调用 SpaceTimee/Console-CensorChecker 即可
 
 ```yaml
-- uses: SpaceTimee/Console-CensorChecker@v1.1.4.53
+- uses: SpaceTimee/Console-CensorChecker@v1.1.4.54
   with:
-      TARGETS: example.com
+    TARGETS: example.com
 ```
 
 ## MCP 托管

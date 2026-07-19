@@ -18,7 +18,7 @@ inputs:
 outputs:
   RESULTS:
     value: ${{ steps.check-censor.outputs.RESULTS }}
-    description: "JSON result of target avg latency ms (Censored: 2147483647)"
+    description: "JSON map of target-latency key-value pairs (timeout: 2147483647)"
 
 runs:
   using: composite
@@ -31,13 +31,11 @@ runs:
         BROWSER: ${{ inputs.BROWSER }}
         PORT: ${{ inputs.PORT }}
       run: |
-        using namespace System.Collections.Specialized
-
         [string] $targetPath = Join-Path $env:GITHUB_ACTION_PATH "Target.txt"
         [string] $externalTargetPath = Join-Path $env:GITHUB_WORKSPACE "Target.txt"
 
         if (-not [string]::IsNullOrWhiteSpace($env:TARGETS)) {
-            [string[]] $targets = @(($env:TARGETS -split "\r?\n").Trim() -ne "")
+            [string[]] $targets = @([string[]]($env:TARGETS -split "\r?\n").Trim() -ne "")
 
             if ($targets.Count -eq 1 -and (Test-Path -LiteralPath $targets[0] -PathType Leaf)) {
                 Copy-Item -LiteralPath $targets[0] $targetPath -Force
@@ -55,13 +53,13 @@ runs:
 
         . (Join-Path $env:GITHUB_ACTION_PATH "App.ps1")
 
-        [OrderedDictionary] $results = [ordered]@{}
+        [hashtable] $results = @{}
 
         [App]::new().Main($env:BROWSER, $env:PORT, {
             param([PSCustomObject] $result)
 
             [App]::WriteCheckResult($result)
-            $results[$result.Target] = $result.Latency
+            $results += @{ $result.Target = $result.Latency }
         })
 
         Add-Content -LiteralPath $env:GITHUB_OUTPUT "RESULTS=$(ConvertTo-Json $results -Compress)"

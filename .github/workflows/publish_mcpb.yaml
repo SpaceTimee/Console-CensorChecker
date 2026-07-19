@@ -1,0 +1,118 @@
+name: Publish MCPB
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+jobs:
+  test-checker:
+    name: Test Checker
+    uses: ./.github/workflows/test_checker.yaml
+
+  publish-mcpb:
+    name: Publish MCPB
+    runs-on: ubuntu-latest
+    needs:
+      - test-checker
+
+    steps:
+      - name: Fetch Module
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            Console-CensorChecker.psm1
+            Console-CensorChecker.psd1
+            App.ps1
+            Provider.js
+
+      - name: Publish MCPB
+        shell: pwsh
+        env:
+          SMITHERY_API_KEY: ${{ secrets.SMITHERY_KEY }}
+        run: |
+          [string] $moduleName = "Console-CensorChecker"
+
+          Import-Module "./$moduleName.psd1"
+
+          [hashtable] $moduleData = Import-PowerShellDataFile "$moduleName.psd1"
+          [string] $moduleRoot = $moduleData.RootModule
+          [string] $moduleVersion = "$env:GITHUB_EVENT_NAME" -eq "release" ? "$env:GITHUB_REF_NAME" : $moduleData.ModuleVersion
+          [string] $moduleCommand = $moduleData.FunctionsToExport
+          [string] $moduleUri = $moduleData.PrivateData.PSData.ProjectUri
+          [string] $packagePath = Join-Path "$env:RUNNER_TEMP" "$moduleName"
+
+          [hashtable] $manifest = @{
+            "manifest_version" = "0.3"
+            "name" = "$moduleName".ToLowerInvariant()
+            "display_name" = "$moduleName" -replace "-", " "
+            "version" = "$moduleVersion"
+            "description" = $moduleData.Description
+            "author" = @{
+              "name" = $moduleData.Author
+              "email" = "4097507@gmail.com"
+              "url" = "https://www.spacetimee.xyz"
+            }
+            "repository" = @{
+              "type" = "git"
+              "url" = "$moduleUri"
+            }
+            "homepage" = "$moduleUri"
+            "documentation" = "$moduleUri"
+            "support" = "$moduleUri/issues"
+            "server" = @{
+              "type" = "binary"
+              "entry_point" = "$moduleRoot"
+              "mcp_config" = @{
+                "command" = "pwsh"
+                "args" = @(
+                  "-Command"
+                  "Import-Module '`${__dirname}/$moduleName.psd1'; $moduleCommand -browser '`${user_config.browser}' -port `${user_config.port} -mcp"
+                )
+              }
+            }
+            "tools" = @(
+              @{
+                "name" = "$moduleCommand"
+                "description" = (Get-Help "$moduleCommand").Synopsis
+              }
+            )
+            "keywords" = @($moduleData.PrivateData.PSData.Tags)
+            "license" = "MIT"
+            "user_config" = @{
+              "browser" = @{
+                "type" = "string"
+                "title" = "Browser"
+                "description" = (Get-Command "$moduleCommand").Parameters["browser"].Attributes[0].HelpMessage
+                "default" = "google-chrome"
+              }
+              "port" = @{
+                "type" = "number"
+                "title" = "Port"
+                "description" = (Get-Command "$moduleCommand").Parameters["port"].Attributes[0].HelpMessage
+                "default" = 443
+              }
+            }
+          }
+
+          $null = New-Item "$packagePath" -ItemType "Directory"
+          Copy-Item "$moduleRoot", "$moduleName.psd1", "App.ps1", "Provider.js" "$packagePath"
+          Set-Content -LiteralPath (Join-Path "$packagePath" "manifest.json") -Value (ConvertTo-Json $manifest -Depth 3 -Compress)
+
+          npx --yes "@anthropic-ai/mcpb" validate (Join-Path "$packagePath" "manifest.json")
+          npx --yes "@anthropic-ai/mcpb" pack "$packagePath" "$moduleName.mcpb"
+          npx --yes "@anthropic-ai/mcpb" clean "$moduleName.mcpb"
+          npx --yes "@anthropic-ai/mcpb" sign "$moduleName.mcpb" --self-signed
+          npx --yes "@anthropic-ai/mcpb" verify "$moduleName.mcpb"
+          npx --yes "@smithery/cli" mcp publish "$moduleName.mcpb" --name "spacetime/$moduleName".ToLowerInvariant()
+
+          Add-Content -LiteralPath "$env:GITHUB_ENV" "MODULE_VERSION=$moduleVersion"
+          Write-Host "Version: $moduleVersion"
+
+      - name: Release Package
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Console-CensorChecker.mcpb
+          tag_name: ${{ env.MODULE_VERSION }}
+          token: ${{ secrets.GH_TOKEN }}

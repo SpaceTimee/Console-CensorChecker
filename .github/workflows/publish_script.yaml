@@ -1,0 +1,46 @@
+name: Publish Script
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+jobs:
+  test-checker:
+    name: Test Checker
+    uses: ./.github/workflows/test_checker.yaml
+
+  publish-script:
+    name: Publish Script
+    runs-on: ubuntu-latest
+    needs:
+      - test-checker
+
+    steps:
+      - name: Fetch Script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            Console-CensorChecker.ps1
+            Console-CensorChecker.psd1
+            App.ps1
+            Provider.js
+
+      - name: Pack Script
+        shell: pwsh
+        run: |
+          [string] $moduleName = "Console-CensorChecker"
+          [string] $moduleVersion = "$env:GITHUB_EVENT_NAME" -eq "release" ? "$env:GITHUB_REF_NAME" : (Import-PowerShellDataFile "$moduleName.psd1").ModuleVersion
+
+          Compress-Archive "$moduleName.ps1", "App.ps1", "Provider.js" "$moduleName.zip"
+
+          Add-Content -LiteralPath "$env:GITHUB_ENV" "MODULE_VERSION=$moduleVersion"
+          Write-Host "Version: $moduleVersion"
+
+      - name: Release Package
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Console-CensorChecker.zip
+          tag_name: ${{ env.MODULE_VERSION }}
+          token: ${{ secrets.GH_TOKEN }}

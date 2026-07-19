@@ -1,0 +1,52 @@
+name: Publish Module
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+jobs:
+  test-checker:
+    name: Test Checker
+    uses: ./.github/workflows/test_checker.yaml
+
+  publish-module:
+    name: Publish Module
+    runs-on: ubuntu-latest
+    needs:
+      - test-checker
+
+    steps:
+      - name: Fetch Module
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            Console-CensorChecker.psm1
+            Console-CensorChecker.psd1
+            App.ps1
+            Provider.js
+
+      - name: Publish Module
+        shell: pwsh
+        env:
+          GALLERY_KEY: ${{ secrets.GALLERY_KEY }}
+        run: |
+          [string] $moduleName = "Console-CensorChecker"
+          [string] $moduleVersion = "$env:GITHUB_EVENT_NAME" -eq "release" ? "$env:GITHUB_REF_NAME" : (Import-PowerShellDataFile "$moduleName.psd1").ModuleVersion
+          [string] $packagePath = Join-Path "$env:RUNNER_TEMP" "$moduleName"
+
+          $null = New-Item "$packagePath" -ItemType "Directory"
+          Copy-Item "$moduleName.psm1", "$moduleName.psd1", "App.ps1", "Provider.js" "$packagePath"
+          Publish-PSResource "$packagePath" -Repository "PSGallery" -ApiKey "$env:GALLERY_KEY" -DestinationPath "."
+          Rename-Item "*.nupkg" "$moduleName.nupkg"
+
+          Add-Content -LiteralPath "$env:GITHUB_ENV" "MODULE_VERSION=$moduleVersion"
+          Write-Host "Version: $moduleVersion"
+
+      - name: Release Package
+        uses: softprops/action-gh-release@v3
+        with:
+          files: Console-CensorChecker.nupkg
+          tag_name: ${{ env.MODULE_VERSION }}
+          token: ${{ secrets.GH_TOKEN }}

@@ -1,0 +1,87 @@
+name: Test Checker
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_call:
+    inputs:
+      TARGETS:
+        description: Host targets or a target file path to check
+        type: string
+        default: example.com
+      PORT:
+        description: Default port for targets
+        type: number
+        default: 443
+  workflow_dispatch:
+    inputs:
+      TARGETS:
+        description: Host targets or a target file path to check
+        type: string
+        default: example.com
+      PORT:
+        description: Default port for targets
+        type: number
+        default: 443
+
+env:
+  TARGETS: ${{ inputs.TARGETS || 'example.com' }}
+  PORT: ${{ inputs.PORT || 443 }}
+
+jobs:
+  test-module:
+    name: Test Module
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch Module
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            Console-CensorChecker.psm1
+            Console-CensorChecker.psd1
+            App.ps1
+            Provider.js
+
+      - name: Run Module
+        shell: pwsh
+        run: |
+          Import-Module "./Console-CensorChecker.psd1"
+          Invoke-Check -targets "$env:TARGETS" -port "$env:PORT"
+
+  test-script:
+    name: Test Script
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch Script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            Console-CensorChecker.ps1
+            App.ps1
+            Provider.js
+
+      - name: Run Script
+        shell: pwsh
+        run: ./Console-CensorChecker.ps1 -targets "$env:TARGETS" -port "$env:PORT"
+
+  test-action:
+    name: Test Action
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch Action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            action.yaml
+            App.ps1
+            Provider.js
+
+      - name: Run Action
+        uses: ./
+        with:
+          TARGETS: ${{ env.TARGETS }}
+          PORT: ${{ env.PORT }}
